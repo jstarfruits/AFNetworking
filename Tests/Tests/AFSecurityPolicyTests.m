@@ -508,10 +508,41 @@ static SecTrustRef AFUTTrustWithCertificate(SecCertificateRef certificate) {
     CFRelease(trust);
 }
 
-- (void)testDefaultPolicyIsSetToAFSSLPinningModePublicKey {
+- (void)testDefaultPolicyIsSetToAFSSLPinningModeNone {
     AFSecurityPolicy *policy = [AFSecurityPolicy defaultPolicy];
 
-    XCTAssert(policy.SSLPinningMode==AFSSLPinningModeNone, @"Default policy is not set to AFSSLPinningModePublicKey.");
+    XCTAssert(policy.SSLPinningMode==AFSSLPinningModeNone, @"Default policy is not set to AFSSLPinningModeNone.");
+}
+
+- (void)testDefaultPolicyMatchesTrustedCertificateWithMatchingHostnameAndRejectsOthers {
+    {
+        //check non-trusted certificate, incorrect domain
+        AFSecurityPolicy *policy = [AFSecurityPolicy defaultPolicy];
+        SecTrustRef trust = AFUTTrustWithCertificate(AFUTSelfSignedCertificateWithCommonNameDomain());
+        XCTAssert([policy evaluateServerTrust:trust forDomain:@"different.foobar.com"] == NO, @"Invalid certificate with mismatching domain should fail");
+        CFRelease(trust);
+    }
+    {
+        //check non-trusted certificate, correct domain
+        AFSecurityPolicy *policy = [AFSecurityPolicy defaultPolicy];
+        SecTrustRef trust = AFUTTrustWithCertificate(AFUTSelfSignedCertificateWithCommonNameDomain());
+        XCTAssert([policy evaluateServerTrust:trust forDomain:@"foobar.com"] == NO, @"Invalid certificate with matching domain should fail");
+        CFRelease(trust);
+    }
+    {
+        //check trusted certificate, wrong domain
+        AFSecurityPolicy *policy = [AFSecurityPolicy defaultPolicy];
+        SecTrustRef trust = AFUTHTTPBinOrgServerTrust();
+        XCTAssert([policy evaluateServerTrust:trust forDomain:@"nothttpbin.org"] == NO, @"Valid certificate with mismatching domain should fail");
+        CFRelease(trust);
+    }
+    {
+        //check trusted certificate, correct domain
+        AFSecurityPolicy *policy = [AFSecurityPolicy defaultPolicy];
+        SecTrustRef trust = AFUTHTTPBinOrgServerTrust();
+        XCTAssert([policy evaluateServerTrust:trust forDomain:@"httpbin.org"] == YES, @"Valid certificate with matching domain should pass");
+        CFRelease(trust);
+    }
 }
 
 - (void)testDefaultPolicyIsSetToNotAllowInvalidSSLCertificates {
@@ -529,7 +560,7 @@ static SecTrustRef AFUTTrustWithCertificate(SecCertificateRef certificate) {
 - (void)testPolicyWithPinningModeIsSetToValidatesDomainName {
     AFSecurityPolicy *policy = [AFSecurityPolicy policyWithPinningMode:AFSSLPinningModeNone];
 
-    XCTAssert(policy.validatesDomainName == NO, @"policyWithPinningMode: should not allow invalid ssl certificates by default.");
+    XCTAssert(policy.validatesDomainName == YES, @"policyWithPinningMode: should validate domain names by default.");
 }
 
 - (void)testThatSSLPinningPolicyClassMethodContainsDefaultCertificates{
